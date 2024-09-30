@@ -1,0 +1,21 @@
+ run: |
+    # Using printf to dynamically insert the secrets into the JSON body
+    RESPONSE=$(curl -X POST -H "Content-Type: application/json" -d "$(printf '{
+      "client_id": "%s",
+      "client_secret": "%s",
+      "grant_type": "client_credentials"
+    }' "${{ secrets.ANYPOINT_CONNECTED_APP_USERNAME }}" "${{ secrets.ANYPOINT_CONNECTED_APP_PASSWORD }}")" \
+    https://anypoint.mulesoft.com/accounts/api/v2/oauth2/token)
+
+    echo "Response: $RESPONSE"
+
+    # Extract the access token from the response
+    ACCESS_TOKEN=$(echo "$RESPONSE" | jq -r '.access_token')
+
+    # Check if the access token is not null and save it in the environment
+    if [ "$ACCESS_TOKEN" != "null" ]; then
+      echo "ANYPOINT_ACCESS_TOKEN=$ACCESS_TOKEN" >> $GITHUB_ENV
+    else
+      echo "Failed to retrieve access token"
+      exit 1
+    fi
