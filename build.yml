@@ -1,21 +1,24 @@
- run: |
-    # Using printf to dynamically insert the secrets into the JSON body
-    RESPONSE=$(curl -X POST -H "Content-Type: application/json" -d "$(printf '{
-      "client_id": "%s",
-      "client_secret": "%s",
-      "grant_type": "client_credentials"
-    }' "${{ secrets.ANYPOINT_CONNECTED_APP_USERNAME }}" "${{ secrets.ANYPOINT_CONNECTED_APP_PASSWORD }}")" \
-    https://anypoint.mulesoft.com/accounts/api/v2/oauth2/token)
+- name: Set up environment variables
+      env:
+        ANYPOINT_ORG_ID: ${{ secrets.ANYPOINT_ORG_ID }}
+        ANYPOINT_ENV_ID: ${{ secrets.ANYPOINT_ENV_ID }}
+        ANYPOINT_CLIENT_ID: ${{ secrets.ANYPOINT_CLIENT_ID }}
+        ANYPOINT_CLIENT_SECRET: ${{ secrets.ANYPOINT_CLIENT_SECRET }}
 
-    echo "Response: $RESPONSE"
+    - name: Get MuleSoft Access Token
+      id: get_token
+      run: |
+        TOKEN_RESPONSE=$(curl -s --location --request POST 'https://anypoint.mulesoft.com/accounts/api/v2/oauth2/token' \
+        --header 'Content-Type: application/x-www-form-urlencoded' \
+        --data-urlencode "client_id=${{ secrets.ANYPOINT_CLIENT_ID }}" \
+        --data-urlencode "client_secret=${{ secrets.ANYPOINT_CLIENT_SECRET }}" \
+        --data-urlencode 'grant_type=client_credentials')
+        TOKEN=$(echo $TOKEN_RESPONSE | jq -r .access_token)
+        echo "::set-output name=token::$TOKEN"
 
-    # Extract the access token from the response
-    ACCESS_TOKEN=$(echo "$RESPONSE" | jq -r '.access_token')
-
-    # Check if the access token is not null and save it in the environment
-    if [ "$ACCESS_TOKEN" != "null" ]; then
-      echo "ANYPOINT_ACCESS_TOKEN=$ACCESS_TOKEN" >> $GITHUB_ENV
-    else
-      echo "Failed to retrieve access token"
-      exit 1
-    fi
+    - name: Upload Custom Policy
+      run: |
+        curl --location --request POST "https://anypoint.mulesoft.com/apimanager/api/v1/organizations/${{ secrets.ANYPOINT_ORG_ID }}/environments/${{ secrets.ANYPOINT_ENV_ID }}/exchange-policy-templates" \
+        --header "Authorization: Bearer ${{ steps.get_token.outputs.token }}" \
+        --header 'Content-Type: application/json' \
+        --data-binary "@/path/to/your/policy.zip"
